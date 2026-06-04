@@ -1,5 +1,7 @@
 # Halo Audio Hooks
 
+![Cortana, Sgt. Johnson, and 343 Guilty Spark](./cover.png)
+
 Halo voice-line sound packs for Claude Code event hooks. Sibling to `claude-audio-hooks`
 (the StarCraft 2 packs) — shares the same scripts and the live install at `~/.claude/sounds/`.
 
