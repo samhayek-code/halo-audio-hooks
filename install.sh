@@ -1,0 +1,140 @@
+#!/bin/bash
+# Halo Audio Hooks — Interactive Installer
+# Halo voice lines for Claude Code event hooks. macOS only (uses afplay).
+# Additive: installs alongside any existing packs (e.g. the SC2 base) without clobbering them.
+
+set -e
+
+CYAN='\033[0;36m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'
+DIM='\033[2m'; BOLD='\033[1m'; NC='\033[0m'
+print_step()    { echo -e "  ${CYAN}▶${NC} $1"; }
+print_success() { echo -e "  ${GREEN}✓${NC} $1"; }
+print_warning() { echo -e "  ${YELLOW}⚠${NC} $1"; }
+print_error()   { echo -e "  ${RED}✗${NC} $1"; }
+
+FORCE=false
+for arg in "$@"; do [ "$arg" = "--force" ] && FORCE=true; done
+
+PACKS=(cortana guilty-spark sergeant-johnson)
+
+echo ""
+echo -e "  ${CYAN}╔══════════════════════════════════════════╗${NC}"
+echo -e "  ${CYAN}║${NC}        ${BOLD}HALO AUDIO HOOKS${NC}                  ${CYAN}║${NC}"
+echo -e "  ${CYAN}║${NC}  ${DIM}Halo voice lines for Claude Code${NC}        ${CYAN}║${NC}"
+echo -e "  ${CYAN}╚══════════════════════════════════════════╝${NC}"
+echo ""
+
+print_step "Checking requirements..."
+if [[ "$(uname)" == "Darwin" ]]; then
+  print_success "macOS detected"
+else
+  print_warning "Non-macOS detected — afplay won't work"
+  echo -e "  ${DIM}  Swap afplay for aplay/paplay/mpv in play-random.sh, then re-run with --force${NC}"
+  [ "$FORCE" = false ] && exit 1
+  print_warning "Continuing with --force..."
+fi
+if command -v python3 &>/dev/null; then
+  print_success "python3 found"
+else
+  print_error "python3 is required (for hooks merge)"; exit 1
+fi
+CLAUDE_DIR="$HOME/.claude"
+[ -d "$CLAUDE_DIR" ] && print_success "Claude Code directory found" || { print_warning "~/.claude not found — creating it"; mkdir -p "$CLAUDE_DIR"; }
+echo ""
+
+# ── Source detection (local repo vs remote curl) ────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+if [[ -d "$SCRIPT_DIR/sounds/cortana" ]]; then
+  SOURCE_DIR="$SCRIPT_DIR"
+else
+  print_step "Downloading from GitHub..."
+  SOURCE_DIR=$(mktemp -d); trap "rm -rf '$SOURCE_DIR'" EXIT
+  curl -fsSL https://github.com/samhayek-code/halo-audio-hooks/archive/main.tar.gz \
+    | tar xz -C "$SOURCE_DIR" --strip-components=1 \
+    || { print_error "Download failed"; exit 1; }
+  print_success "Downloaded"; echo ""
+fi
+
+# ── Pack picker ─────────────────────────────────────────────────────────────
+echo -e "  ${CYAN}┌────────────────────────────────────────────────┐${NC}"
+echo -e "  ${CYAN}│${NC}  ${BOLD}SELECT YOUR VOICE${NC}                              ${CYAN}│${NC}"
+echo -e "  ${CYAN}├────────────────────────────────────────────────┤${NC}"
+echo -e "  ${CYAN}│${NC}   ${BOLD}[1]${NC} Cortana         — ${DIM}\"Wake me when you need me\"${NC} ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}   ${BOLD}[2]${NC} 343 Guilty Spark — ${DIM}\"Greetings, Reclaimer\"${NC}    ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}   ${BOLD}[3]${NC} Sgt. Johnson     — ${DIM}\"Let's get it done\"${NC}       ${CYAN}│${NC}"
+echo -e "  ${CYAN}└────────────────────────────────────────────────┘${NC}"
+echo ""
+if [ -t 0 ]; then
+  read -p "  Enter choice [1-3, default=1]: " CHOICE
+else
+  CHOICE=$(bash -c 'read -p "  Enter choice [1-3, default=1]: " c < /dev/tty && echo "$c"' 2>/dev/null) || { CHOICE="1"; echo -e "  ${DIM}Non-interactive — defaulting to Cortana${NC}"; }
+fi
+case "$CHOICE" in 2) PACK="guilty-spark" ;; 3) PACK="sergeant-johnson" ;; *) PACK="cortana" ;; esac
+echo ""
+
+SOUNDS_DEST="$CLAUDE_DIR/sounds"
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+
+# ── Copy packs (additive) ───────────────────────────────────────────────────
+print_step "Deploying Halo packs..."
+mkdir -p "$SOUNDS_DEST"
+for pack in "${PACKS[@]}"; do
+  rm -rf "$SOUNDS_DEST/$pack"
+  cp -R "$SOURCE_DIR/sounds/$pack" "$SOUNDS_DEST/"
+  count=$(find "$SOUNDS_DEST/$pack" \( -name '*.mp3' -o -name '*.m4a' \) | wc -l | tr -d ' ')
+  print_success "$pack ($count clips)"
+done
+
+print_step "Installing scripts..."
+for s in play-random.sh play-error.sh set-faction.sh; do
+  cp "$SOURCE_DIR/sounds/$s" "$SOUNDS_DEST/"; chmod +x "$SOUNDS_DEST/$s"
+done
+print_success "play-random.sh, play-error.sh, set-faction.sh"
+
+print_step "Setting active voice to: $PACK"
+rm -f "$SOUNDS_DEST/active"; ln -s "$SOUNDS_DEST/$PACK" "$SOUNDS_DEST/active"
+print_success "Active: $PACK"
+
+# ── Merge hooks into settings.json (idempotent, shared with SC2 base) ────────
+print_step "Configuring hooks..."
+mkdir -p "$CLAUDE_DIR"
+[ -f "$SETTINGS_FILE" ] || echo "{}" > "$SETTINGS_FILE"
+cp "$SETTINGS_FILE" "$SETTINGS_FILE.backup"
+python3 << 'PYEOF'
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+with open(p) as f: settings = json.load(f)
+HOOKS = {
+  "SessionStart": {"hooks": [{"type":"command","command":"$HOME/.claude/sounds/play-random.sh $HOME/.claude/sounds/active/session-start"}]},
+  "Stop": {"hooks": [{"type":"command","command":"$HOME/.claude/sounds/play-random.sh $HOME/.claude/sounds/active/task-complete"}]},
+  "Notification": {"matcher":"permission_prompt","hooks": [{"type":"command","command":"$HOME/.claude/sounds/play-random.sh $HOME/.claude/sounds/active/needs-permission"}]},
+  "PostToolUseFailure": {"matcher":"Bash","hooks": [{"type":"command","command":"$HOME/.claude/sounds/play-error.sh"}]},
+}
+MARKER = ".claude/sounds/"
+hooks = settings.get("hooks", {})
+for event, entry in HOOKS.items():
+    kept = [e for e in hooks.get(event, []) if not any(MARKER in h.get("command","") for h in e.get("hooks",[]))]
+    kept.append(entry)
+    hooks[event] = kept
+settings["hooks"] = hooks
+with open(p,"w") as f: json.dump(settings, f, indent=2); f.write("\n")
+PYEOF
+print_success "Hooks merged into settings.json (backup: settings.json.backup)"
+
+echo ""
+echo -e "  ${GREEN}╔══════════════════════════════════════════╗${NC}"
+echo -e "  ${GREEN}║${NC}        ${BOLD}INSTALLATION COMPLETE${NC}             ${GREEN}║${NC}"
+echo -e "  ${GREEN}╚══════════════════════════════════════════╝${NC}"
+case "$PACK" in
+  cortana)          echo -e "  ${DIM}\"Don't make a girl a promise...\"${NC}" ;;
+  guilty-spark)     echo -e "  ${DIM}\"Greetings. I am the Monitor of this installation.\"${NC}" ;;
+  sergeant-johnson) echo -e "  ${DIM}\"I love me some me.\"${NC}" ;;
+esac
+echo ""
+echo -e "  ${CYAN}Switch voice:${NC}  ~/.claude/sounds/set-faction.sh guilty-spark"
+echo -e "  ${DIM}(also works with SC2 packs if claude-audio-hooks is installed)${NC}"
+echo -e "  ${CYAN}Test:${NC}         ~/.claude/sounds/play-random.sh ~/.claude/sounds/active/session-start"
+echo -e "  ${CYAN}Uninstall:${NC}    ./uninstall.sh"
+echo ""
+echo -e "  ${DIM}Start a new Claude Code session to hear it.${NC}"
+echo ""

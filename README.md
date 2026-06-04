@@ -7,6 +7,22 @@ Halo voice-line sound packs for Claude Code event hooks. Sibling to
 (the StarCraft 2 packs) — shares the same scripts and the live install at `~/.claude/sounds/`.
 Think of it as an expansion: install the base, drop these packs in alongside, switch freely.
 
+## Install
+
+Standalone — no other repo required (macOS; uses `afplay`). One-liner:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/samhayek-code/halo-audio-hooks/main/install.sh)
+```
+
+Or clone and run `./install.sh`. It deploys the packs + scripts to `~/.claude/sounds/`,
+merges the event hooks into `~/.claude/settings.json` (backed up first), and lets you pick a
+starting voice. Start a new Claude Code session to hear it. Remove with `./uninstall.sh`.
+
+Installs **additively** — if the SC2 base ([`claude-audio-hooks`](https://github.com/samhayek-code/claude-audio-hooks))
+is already installed, this drops in alongside it and you switch across all packs with
+`set-faction.sh`. Uninstalling Halo leaves the SC2 packs and shared hooks intact.
+
 ## Packs
 
 | Pack | Character | Source |
