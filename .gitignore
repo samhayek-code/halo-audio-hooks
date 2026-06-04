@@ -3,3 +3,5 @@ _*backup/
 _*tmp/
 __pycache__/
 *.pyc
+.originals/
+tools/catalogs/
