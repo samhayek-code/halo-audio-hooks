@@ -1,5 +1,12 @@
 # Halo Audio Hooks
 
+> **📦 Moved — this repo is archived (read-only).**
+> The Halo packs and their cleaning pipeline now live in
+> **[claude-audio-hooks](https://github.com/samhayek-code/claude-audio-hooks)**,
+> the single monorepo for all packs (StarCraft 2 · Halo · Tiberian Sun).
+> Install from there:
+> `bash <(curl -fsSL https://raw.githubusercontent.com/samhayek-code/claude-audio-hooks/main/install.sh)`
+
 ![Cortana, Sgt. Johnson, and 343 Guilty Spark](./cover.png)
 
 Halo voice-line sound packs for Claude Code event hooks. Sibling to
